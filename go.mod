@@ -9,5 +9,6 @@ require (
 	github.com/Azure/go-autorest/autorest/to v0.3.0
 	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
 	github.com/gobuffalo/envy v1.9.0
+	github.com/kthomas/go.uuid v1.2.0
 	golang.org/x/crypto v0.0.0-20200320181102-891825fb96df // indirect
 )

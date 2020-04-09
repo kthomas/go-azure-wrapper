@@ -8,10 +8,13 @@ import (
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-05-01/resources"
 	"github.com/gobuffalo/envy"
 
+	"github.com/Azure/azure-sdk-for-go/services/containerinstance/mgmt/2018-10-01/containerinstance"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-12-01/network"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/go-autorest/autorest/to"
+
+	uuid "github.com/kthomas/go.uuid"
 )
 
 var (
@@ -35,19 +38,122 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
 
-	_, err = UpsertResourceGroup(ctx, "skynet", subscriptionID)
+	groupName := "skynet"
+
+	_, err = UpsertResourceGroup(ctx, groupName, subscriptionID)
 	if err != nil {
 		println(fmt.Sprintf("cannot create group: %v", err.Error()))
 	}
 
-	vnet, err := UpsertVirtualNetwork(ctx, subscriptionID, "skynet", "skynet-vpc", "eastus")
+	vnet, err := UpsertVirtualNetwork(ctx, subscriptionID, groupName, "skynet-vpc", "eastus")
 	if err != nil {
 		panic(fmt.Sprintf("virtual network creation failed"))
 	}
 
 	println(fmt.Sprintf("vnet: %+v", vnet))
 
+	image := to.StringPtr("nginx:latest")
+
+	container, err := StartContainer(ctx, "resGroup", image, to.StringPtr(groupName),
+	subscriptionID, to.Float64Ptr(2), to.Float64Ptr(4), []string{}, []string, []string{"subnet1", "subnet2"}, 
+	map[string]interface{}{}, "eastus", map[string]interface{}{})
+
+	println(fmt.Sprintf("container: %+v", container))
+
 	return
+}
+
+// StartContainer starts a new node in network
+func StartContainer(ctx context.Context, resourceGroupName string,
+	image *string, virtualNetworkID *string, subscriptionID string,
+	cpu, memory *int64,
+	entrypoint []*string,
+	securityGroupIds []string,
+	subnetIds []string,
+	environment map[string]interface{},
+	region string,
+	security map[string]interface{}) (ids []string, err error) {
+	if image == nil {
+		return ids, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", region)
+	}
+
+	if security != nil && len(security) > 0 {
+		return ids, fmt.Errorf("Unable to start container in region: %s; security configuration not yet supported when a task definition arn is provided as the target to be started", region)
+	}
+
+	securityGroups := make([]*string, 0)
+	for i := range security {
+		securityGroups = append(securityGroups, to.StringPtr(security[i]))
+	}
+
+	containerGroupName, _ := uuid.NewV4().String()
+	cgClient, err := NewContainerGroupsClient(subscriptionID)
+    future, err := cgClient.CreateOrUpdate(
+		ctx,
+		resourceGroupName,
+		containerGroupName,
+		containerinstance.ContainerGroup{
+			Name: &containerGroupName,
+			Location: &region,
+			ContainerGroupProperties: &containerinstance.ContainerGroupProperties{
+				IPAddress: &containerinstance.IPAddress{
+					Type: containerinstance.Public,
+					Ports: &[]containerinstance.Port{
+						{
+							Port:     to.Int32Ptr(80),
+							Protocol: containerinstance.TCP,
+						},
+					},
+				},
+				OsType: containerinstance.Linux,
+				Containers: &[]containerinstance.Container{
+					{
+						Name: to.StringPtr("gosdk-container"),
+						ContainerProperties: &containerinstance.ContainerProperties{
+							Ports: &[]containerinstance.ContainerPort{
+								{
+									Port: to.Int32Ptr(80),
+								},
+							},
+							Image: to.StringPtr("nginx:latest"),
+							Resources: &containerinstance.ResourceRequirements{
+								Limits: &containerinstance.ResourceLimits{
+									MemoryInGB: memory,
+									CPU:        cpu,
+								},
+								Requests: &containerinstance.ResourceRequests{
+									MemoryInGB: memory,
+									CPU:        cpu,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	if err != nil {
+		log.Fatalf("cannot create container group: %v", err)
+	}
+
+	err = future.WaitForCompletionRef(ctx, cgClient.Client)
+	if err != nil {
+		log.Fatalf("cannot create container group: %v", err)
+	}
+	return future.Result(cgClient)
+
+}
+
+// NewContainerGroupsClient is creating a container group client
+func NewContainerGroupsClient(subscriptionID string) (containerinstance.ContainerGroupsClient, error) {
+	client := containerinstance.NewContainerGroupsClient(subscriptionID)
+	if auth, err := GetAuthorizer(); err == nil {
+		client.Authorizer = auth
+		return client, nil
+	} else {
+		return client, err
+	}
 }
 
 // NewAuthorizer initializes a new authorizer from the configured environment
