@@ -18,3 +18,5 @@ _cgo_export.*
 *.prof
 .idea/
 *.iml
+
+go-azure-wrapper
