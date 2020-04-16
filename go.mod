@@ -12,6 +12,6 @@ require (
 	github.com/gobuffalo/envy v1.9.0
 	github.com/google/logger v1.1.0 // indirect
 	github.com/kthomas/go-logger v0.0.0-20190616094252-01c360658513
-	github.com/kthomas/go.uuid v1.2.0
+	github.com/kthomas/go.uuid v1.2.1-0.20190324131420-28d1fa77e9a4
 	golang.org/x/crypto v0.0.0-20200320181102-891825fb96df // indirect
 )

@@ -134,8 +134,8 @@ func StartContainer(ctx context.Context,
 		}
 	}
 
-	containerGroupName := uuid.NewV4()
-	containerName := uuid.NewV4()
+	containerGroupName, _ := uuid.NewV4()
+	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(subscriptionID)
 	future, err := cgClient.CreateOrUpdate(
 		ctx,
