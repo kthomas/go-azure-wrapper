@@ -225,23 +225,26 @@ func StartContainer(ctx context.Context,
 }
 
 // UpsertResourceGroup upserts a resource group for the given params
-func UpsertResourceGroup(ctx context.Context, name, region string) (resources.Group, error) {
+func UpsertResourceGroup(ctx context.Context, name, region string) (*resources.Group, error) {
 	gClient, err := NewResourceGroupsClient(region)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init resource groups client; %s", err.Error())
+	}
+
 	group := resources.Group{
 		Location: to.StringPtr(region),
 	}
-	if err == nil {
-		group, err := gClient.CreateOrUpdate(ctx, name, group)
-		return group, err
+
+	group, err = gClient.CreateOrUpdate(ctx, name, group)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert resource group; %s", err.Error())
 	}
-	// if err != nil {
-	// 	log.Warningf("failed to upsert resource group: %s; %s", name, err.Error())
-	// }
-	return group, err
+
+	return &group, nil
 }
 
 // UpsertVirtualNetwork upserts a resource group for the given params
-func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, region string) (vnet network.VirtualNetwork, err error) {
+func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, region string) (*network.VirtualNetwork, error) {
 	vnetClient, _ := NewVirtualNetworksClient(subscriptionID)
 	future, err := vnetClient.CreateOrUpdate(
 		ctx,
@@ -279,5 +282,10 @@ func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, 
 		return nil, fmt.Errorf("cannot get the vnet create or update future response: %v", err)
 	}
 
-	return future.Result(vnetClient)
+	vnet, err := future.Result(vnetClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new virtual network; %s", err.Error())
+	}
+
+	return &vnet, nil
 }
