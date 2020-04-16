@@ -3,7 +3,6 @@ package azurewrapper
 import (
 	"context"
 	"fmt"
-	"time"
 
 	uuid "github.com/kthomas/go.uuid"
 
@@ -15,51 +14,11 @@ import (
 	"github.com/Azure/go-autorest/autorest/to"
 )
 
-var (
-	authorizer     autorest.Authorizer
-	subscriptionID string
-)
-
-func main() {
-
-	// if err := envy.Load(); err != nil {
-	// 	println(fmt.Sprintf("env load error: %v", err.Error()))
-	// 	return
-	// }
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
-	defer cancel()
-
-	groupName := "skynet"
-
-	_, err := UpsertResourceGroup(ctx, groupName, subscriptionID)
-	if err != nil {
-		println(fmt.Sprintf("cannot create group: %v", err.Error()))
-	}
-
-	vnet, err := UpsertVirtualNetwork(ctx, subscriptionID, groupName, "skynet-vpc", "eastus")
-	if err != nil {
-		panic(fmt.Sprintf("virtual network creation failed"))
-	}
-
-	println(fmt.Sprintf("vnet: %+v", vnet))
-
-	image := to.StringPtr("provide/nats-server:latest")
-
-	container, err := StartContainer(ctx, groupName, image, to.StringPtr(groupName),
-		subscriptionID, to.Int64Ptr(2), to.Int64Ptr(4), []*string{}, []string{}, []string{"subnet1", "subnet2"},
-		map[string]interface{}{}, "eastus", map[string]interface{}{})
-
-	println(fmt.Sprintf("container: %+v", container))
-
-	return
-}
-
 // NewContainerGroupsClient is creating a container group client
 func NewContainerGroupsClient(subscriptionID string) (containerinstance.ContainerGroupsClient, error) {
 	client := containerinstance.NewContainerGroupsClient(subscriptionID)
 	if auth, err := GetAuthorizer(); err == nil {
-		client.Authorizer = auth
+		client.Authorizer = *auth
 		return client, nil
 	} else {
 		return client, err
@@ -73,19 +32,19 @@ func newAuthorizer() (autorest.Authorizer, error) {
 }
 
 // GetAuthorizer initializes new authorizer or returns existing
-func GetAuthorizer() (autorest.Authorizer, error) {
-	if authorizer == nil {
-		authorizer, err := newAuthorizer()
-		return authorizer, err
+func GetAuthorizer() (*autorest.Authorizer, error) {
+	authorizer, err := newAuthorizer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve Azure authorizer; %s", err.Error())
 	}
-	return authorizer, nil
+	return &authorizer, nil
 }
 
 // NewResourceGroupsClient initializes and returns an instance of the resource groups API client
 func NewResourceGroupsClient(subscriptionID string) (resources.GroupsClient, error) {
 	client := resources.NewGroupsClient(subscriptionID)
 	if auth, err := GetAuthorizer(); err == nil {
-		client.Authorizer = auth
+		client.Authorizer = *auth
 		return client, nil
 	} else {
 		return client, err
@@ -96,7 +55,7 @@ func NewResourceGroupsClient(subscriptionID string) (resources.GroupsClient, err
 func NewVirtualNetworksClient(subscriptionID string) (network.VirtualNetworksClient, error) {
 	client := network.NewVirtualNetworksClient(subscriptionID)
 	if auth, err := GetAuthorizer(); err == nil {
-		client.Authorizer = auth
+		client.Authorizer = *auth
 		return client, nil
 	} else {
 		return client, err
