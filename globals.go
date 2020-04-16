@@ -8,9 +8,8 @@ import (
 )
 
 var (
-	log             *logger.Logger
-	awsDefaultVpcID string
-	bootstrapOnce   sync.Once
+	log           *logger.Logger
+	bootstrapOnce sync.Once
 )
 
 func init() {

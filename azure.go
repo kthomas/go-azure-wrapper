@@ -64,11 +64,11 @@ func NewVirtualNetworksClient(subscriptionID string) (network.VirtualNetworksCli
 
 // StartContainer starts a new node in network
 func StartContainer(ctx context.Context,
-	resourceGroupName string,
+	subscriptionID string,
 	region string,
+	resourceGroupName string,
 	image *string,
 	virtualNetworkID *string,
-	subscriptionID string,
 	cpu, memory *int64,
 	entrypoint []*string,
 	securityGroupIds []string,
@@ -135,8 +135,7 @@ func StartContainer(ctx context.Context,
 	}
 
 	containerGroupName := uuid.NewV4()
-	containerName := fmt.Sprintf("%s - %s", containerGroupName.String(), *image)
-
+	containerName := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(subscriptionID)
 	future, err := cgClient.CreateOrUpdate(
 		ctx,
@@ -153,7 +152,7 @@ func StartContainer(ctx context.Context,
 				OsType: containerinstance.Linux,
 				Containers: &[]containerinstance.Container{
 					{
-						Name: &containerName,
+						Name: to.StringPtr(containerName.String()),
 						ContainerProperties: &containerinstance.ContainerProperties{
 							EnvironmentVariables: &env,
 							Image:                image,
@@ -196,8 +195,8 @@ func StartContainer(ctx context.Context,
 }
 
 // UpsertResourceGroup upserts a resource group for the given params
-func UpsertResourceGroup(ctx context.Context, name, region string) (*resources.Group, error) {
-	gClient, err := NewResourceGroupsClient(region)
+func UpsertResourceGroup(ctx context.Context, subscriptionID, region, name string) (*resources.Group, error) {
+	gClient, err := NewResourceGroupsClient(subscriptionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init resource groups client; %s", err.Error())
 	}
