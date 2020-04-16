@@ -65,6 +65,7 @@ func NewVirtualNetworksClient(subscriptionID string) (network.VirtualNetworksCli
 // StartContainer starts a new node in network
 func StartContainer(ctx context.Context,
 	resourceGroupName string,
+	region string,
 	image *string,
 	virtualNetworkID *string,
 	subscriptionID string,
@@ -73,14 +74,24 @@ func StartContainer(ctx context.Context,
 	securityGroupIds []string,
 	subnetIds []string,
 	environment map[string]interface{},
-	region string,
-	security map[string]interface{}) (ids []string, err error) {
+	security map[string]interface{},
+) (ids []string, err error) {
 	if image == nil {
 		return ids, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", region)
 	}
 
 	if security != nil && len(security) > 0 {
 		return ids, fmt.Errorf("Unable to start container in region: %s; security configuration not yet supported when a task definition arn is provided as the target to be started", region)
+	}
+
+	env := make([]containerinstance.EnvironmentVariable, 0)
+	for k := range environment {
+		if val, valOk := environment[k].(string); valOk {
+			env = append(env, containerinstance.EnvironmentVariable{
+				Name:  to.StringPtr(k),
+				Value: to.StringPtr(val),
+			})
+		}
 	}
 
 	// var healthCheck *ecs.HealthCheck
@@ -144,8 +155,9 @@ func StartContainer(ctx context.Context,
 					{
 						Name: &containerName,
 						ContainerProperties: &containerinstance.ContainerProperties{
-							Ports: &containerPortMappings,
-							Image: image,
+							EnvironmentVariables: &env,
+							Image:                image,
+							Ports:                &containerPortMappings,
 							Resources: &containerinstance.ResourceRequirements{
 								Limits: &containerinstance.ResourceLimits{
 									MemoryInGB: to.Float64Ptr(float64(*memory)),
