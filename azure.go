@@ -25,6 +25,17 @@ func NewContainerGroupsClient(subscriptionID string) (containerinstance.Containe
 	}
 }
 
+// NewLoadBalancerClient is creating a load balancer client
+func NewLoadBalancerClient(subscriptionID string) (network.LoadBalancersClient, error) {
+	client := network.NewLoadBalancersClient(subscriptionID)
+	if auth, err := GetAuthorizer(); err == nil {
+		client.Authorizer = *auth
+		return client, nil
+	} else {
+		return client, err
+	}
+}
+
 // NewAuthorizer initializes a new authorizer from the configured environment
 func newAuthorizer() (autorest.Authorizer, error) {
 	// FIXME-- pass args in
@@ -258,4 +269,245 @@ func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, 
 	}
 
 	return &vnet, nil
+}
+
+// CreateLoadBalancer creates load balancer for a group
+func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupName, subscriptionID string, security map[string]interface{}) (lb *network.LoadBalancer, err error) {
+	probeName := "probe"
+	frontEndIPConfigName := "fip"
+	backEndAddressPoolName := "backEndPool"
+	idPrefix := fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/loadBalancers", subscriptionID, groupName)
+
+	pip, err := GetPublicIP(ctx, pipName, groupName, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public IP address; %s", err.Error())
+	}
+	println(fmt.Sprintf("ip: %+v", pip))
+
+	lbClient, err := NewLoadBalancerClient(subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create load balancer client; %s", err.Error())
+	}
+	println(fmt.Sprintf("client: %+v", lbClient))
+
+	rules := make([]network.LoadBalancingRule, 0)
+	defaultRule := network.LoadBalancingRule{
+		Name: to.StringPtr("lbRule"),
+		LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+			Protocol:             network.TransportProtocolTCP,
+			FrontendPort:         to.Int32Ptr(80),
+			BackendPort:          to.Int32Ptr(80),
+			IdleTimeoutInMinutes: to.Int32Ptr(4),
+			EnableFloatingIP:     to.BoolPtr(false),
+			LoadDistribution:     network.LoadDistributionDefault,
+			FrontendIPConfiguration: &network.SubResource{
+				ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+			},
+			BackendAddressPool: &network.SubResource{
+				ID: to.StringPtr(fmt.Sprintf("/%s/%s/backendAddressPools/%s", idPrefix, lbName, backEndAddressPoolName)),
+			},
+			Probe: &network.SubResource{
+				ID: to.StringPtr(fmt.Sprintf("/%s/%s/probes/%s", idPrefix, lbName, probeName)),
+			},
+		},
+	}
+	rules = append(rules, defaultRule)
+
+	// portMappings := make([]containerinstance.Port, 0)
+	// containerPortMappings := make([]containerinstance.ContainerPort, 0)
+
+	if security != nil {
+		if ingress, ingressOk := security["ingress"]; ingressOk {
+			switch ingress.(type) {
+			case map[string]interface{}:
+				ingressCfg := ingress.(map[string]interface{})
+				for cidr := range ingressCfg {
+					if tcp, tcpOk := ingressCfg[cidr].(map[string]interface{})["tcp"].([]interface{}); tcpOk {
+						for i := range tcp {
+							port := int32(tcp[i].(float64))
+
+							rule := network.LoadBalancingRule{
+								Name: to.StringPtr(fmt.Sprintf("lbRuleTcp%d", i)),
+								LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+									Protocol:             network.TransportProtocolTCP,
+									FrontendPort:         to.Int32Ptr(port),
+									BackendPort:          to.Int32Ptr(port),
+									IdleTimeoutInMinutes: to.Int32Ptr(4),
+									EnableFloatingIP:     to.BoolPtr(false),
+									LoadDistribution:     network.LoadDistributionDefault,
+									FrontendIPConfiguration: &network.SubResource{
+										ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+									},
+									BackendAddressPool: &network.SubResource{
+										ID: to.StringPtr(fmt.Sprintf("/%s/%s/backendAddressPools/%s", idPrefix, lbName, backEndAddressPoolName)),
+									},
+									Probe: &network.SubResource{
+										ID: to.StringPtr(fmt.Sprintf("/%s/%s/probes/%s", idPrefix, lbName, probeName)),
+									},
+								},
+							}
+							rules = append(rules, rule)
+
+						}
+					}
+
+					if udp, udpOk := ingressCfg[cidr].(map[string]interface{})["udp"].([]interface{}); udpOk {
+						for i := range udp {
+							port := int32(udp[i].(float64))
+
+							rule := network.LoadBalancingRule{
+								Name: to.StringPtr(fmt.Sprintf("lbRuleUdp%d", i)),
+								LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+									Protocol:             network.TransportProtocolUDP,
+									FrontendPort:         to.Int32Ptr(port),
+									BackendPort:          to.Int32Ptr(port),
+									IdleTimeoutInMinutes: to.Int32Ptr(4),
+									EnableFloatingIP:     to.BoolPtr(false),
+									LoadDistribution:     network.LoadDistributionDefault,
+									FrontendIPConfiguration: &network.SubResource{
+										ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+									},
+									BackendAddressPool: &network.SubResource{
+										ID: to.StringPtr(fmt.Sprintf("/%s/%s/backendAddressPools/%s", idPrefix, lbName, backEndAddressPoolName)),
+									},
+									Probe: &network.SubResource{
+										ID: to.StringPtr(fmt.Sprintf("/%s/%s/probes/%s", idPrefix, lbName, probeName)),
+									},
+								},
+							}
+							rules = append(rules, rule)
+
+						}
+					}
+				}
+			}
+		}
+	}
+
+	future, err := lbClient.CreateOrUpdate(ctx,
+		groupName,
+		lbName,
+		network.LoadBalancer{
+			Location: to.StringPtr(location),
+			LoadBalancerPropertiesFormat: &network.LoadBalancerPropertiesFormat{
+				FrontendIPConfigurations: &[]network.FrontendIPConfiguration{
+					{
+						Name: &frontEndIPConfigName,
+						FrontendIPConfigurationPropertiesFormat: &network.FrontendIPConfigurationPropertiesFormat{
+							PrivateIPAllocationMethod: network.Dynamic,
+							PublicIPAddress:           &pip,
+						},
+					},
+				},
+				BackendAddressPools: &[]network.BackendAddressPool{
+					{
+						Name: &backEndAddressPoolName,
+					},
+				},
+				Probes: &[]network.Probe{
+					{
+						Name: &probeName,
+						ProbePropertiesFormat: &network.ProbePropertiesFormat{
+							Protocol:          network.ProbeProtocolHTTP,
+							Port:              to.Int32Ptr(80),
+							IntervalInSeconds: to.Int32Ptr(15),
+							NumberOfProbes:    to.Int32Ptr(4),
+							RequestPath:       to.StringPtr("healthprobe.aspx"),
+						},
+					},
+				},
+				LoadBalancingRules: &rules,
+				InboundNatRules: &[]network.InboundNatRule{
+					{
+						Name: to.StringPtr("natRule1"),
+						InboundNatRulePropertiesFormat: &network.InboundNatRulePropertiesFormat{
+							Protocol:             network.TransportProtocolTCP,
+							FrontendPort:         to.Int32Ptr(21),
+							BackendPort:          to.Int32Ptr(22),
+							EnableFloatingIP:     to.BoolPtr(false),
+							IdleTimeoutInMinutes: to.Int32Ptr(4),
+							FrontendIPConfiguration: &network.SubResource{
+								ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+							},
+						},
+					},
+					{
+						Name: to.StringPtr("natRule2"),
+						InboundNatRulePropertiesFormat: &network.InboundNatRulePropertiesFormat{
+							Protocol:             network.TransportProtocolTCP,
+							FrontendPort:         to.Int32Ptr(23),
+							BackendPort:          to.Int32Ptr(22),
+							EnableFloatingIP:     to.BoolPtr(false),
+							IdleTimeoutInMinutes: to.Int32Ptr(4),
+							FrontendIPConfiguration: &network.SubResource{
+								ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+							},
+						},
+					},
+				},
+			},
+		})
+
+	if err != nil {
+		return lb, fmt.Errorf("cannot create load balancer: %v", err)
+	}
+
+	err = future.WaitForCompletionRef(ctx, lbClient.Client)
+	if err != nil {
+		return lb, fmt.Errorf("cannot get load balancer create or update future response: %v", err)
+	}
+
+	balancer, err := future.Result(lbClient)
+	return &balancer, err
+}
+
+// NewIPClient creates public IP addresses client
+func NewIPClient(subscriptionID string) (network.PublicIPAddressesClient, error) {
+	client := network.NewPublicIPAddressesClient(subscriptionID)
+	if auth, err := GetAuthorizer(); err == nil {
+		client.Authorizer = *auth
+		return client, nil
+	} else {
+		return client, err
+	}
+}
+
+// GetPublicIP returns an existing public IP
+func GetPublicIP(ctx context.Context, ipName, groupName, subscriptionID string) (network.PublicIPAddress, error) {
+	ipClient, _ := NewIPClient(subscriptionID)
+	return ipClient.Get(ctx, groupName, ipName, "")
+}
+
+// CreatePublicIP creates public IP address
+func CreatePublicIP(ctx context.Context, ipName, location, groupName, subscriptionID string) (ip *network.PublicIPAddress, err error) {
+	ipClient, err := NewIPClient(subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init public IP client; %s", err.Error())
+	}
+
+	future, err := ipClient.CreateOrUpdate(
+		ctx,
+		groupName,
+		ipName,
+		network.PublicIPAddress{
+			Name:     to.StringPtr(ipName),
+			Location: to.StringPtr(location),
+			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
+				PublicIPAddressVersion:   network.IPv4,
+				PublicIPAllocationMethod: network.Static,
+			},
+		},
+	)
+
+	if err != nil {
+		return ip, fmt.Errorf("cannot create public ip address: %v", err)
+	}
+
+	err = future.WaitForCompletionRef(ctx, ipClient.Client)
+	if err != nil {
+		return ip, fmt.Errorf("cannot get public ip address create or update future response: %v", err)
+	}
+
+	addr, err := future.Result(ipClient)
+	return &addr, err
 }
