@@ -91,8 +91,8 @@ func StartContainer(ctx context.Context,
 		return ids, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", region)
 	}
 
-	if security != nil && len(security) > 0 {
-		return ids, fmt.Errorf("Unable to start container in region: %s; security configuration not yet supported when a task definition arn is provided as the target to be started", region)
+	if security != nil && len(security) == 0 {
+		return ids, fmt.Errorf("Unable to start container w/o security config")
 	}
 
 	env := make([]containerinstance.EnvironmentVariable, 0)
@@ -148,6 +148,10 @@ func StartContainer(ctx context.Context,
 	containerGroupName, _ := uuid.NewV4()
 	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(subscriptionID)
+	if err != nil {
+		return ids, fmt.Errorf("Unable to get container client: %s; ", err.Error())
+	}
+
 	future, err := cgClient.CreateOrUpdate(
 		ctx,
 		resourceGroupName,
@@ -273,6 +277,10 @@ func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, 
 
 // CreateLoadBalancer creates load balancer for a group
 func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupName, subscriptionID string, security map[string]interface{}) (lb *network.LoadBalancer, err error) {
+	if security != nil && len(security) == 0 {
+		return lb, fmt.Errorf("Unable to start container w/o security config")
+	}
+
 	probeName := "probe"
 	frontEndIPConfigName := "fip"
 	backEndAddressPoolName := "backEndPool"
@@ -291,27 +299,30 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 	println(fmt.Sprintf("client: %+v", lbClient))
 
 	rules := make([]network.LoadBalancingRule, 0)
-	defaultRule := network.LoadBalancingRule{
-		Name: to.StringPtr("lbRule"),
-		LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
-			Protocol:             network.TransportProtocolTCP,
-			FrontendPort:         to.Int32Ptr(80),
-			BackendPort:          to.Int32Ptr(80),
-			IdleTimeoutInMinutes: to.Int32Ptr(4),
-			EnableFloatingIP:     to.BoolPtr(false),
-			LoadDistribution:     network.LoadDistributionDefault,
-			FrontendIPConfiguration: &network.SubResource{
-				ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
-			},
-			BackendAddressPool: &network.SubResource{
-				ID: to.StringPtr(fmt.Sprintf("/%s/%s/backendAddressPools/%s", idPrefix, lbName, backEndAddressPoolName)),
-			},
-			Probe: &network.SubResource{
-				ID: to.StringPtr(fmt.Sprintf("/%s/%s/probes/%s", idPrefix, lbName, probeName)),
-			},
-		},
-	}
-	rules = append(rules, defaultRule)
+	inboundNatRules := make([]network.InboundNatRule, 0)
+	// outboundRules := make([]network.OutboundRule, 0)
+	var healthCheckPort int32
+	// defaultRule := network.LoadBalancingRule{
+	// 	Name: to.StringPtr("lbRule"),
+	// 	LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+	// 		Protocol:             network.TransportProtocolTCP,
+	// 		FrontendPort:         to.Int32Ptr(80),
+	// 		BackendPort:          to.Int32Ptr(80),
+	// 		IdleTimeoutInMinutes: to.Int32Ptr(4),
+	// 		EnableFloatingIP:     to.BoolPtr(false),
+	// 		LoadDistribution:     network.LoadDistributionDefault,
+	// 		FrontendIPConfiguration: &network.SubResource{
+	// 			ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+	// 		},
+	// 		BackendAddressPool: &network.SubResource{
+	// 			ID: to.StringPtr(fmt.Sprintf("/%s/%s/backendAddressPools/%s", idPrefix, lbName, backEndAddressPoolName)),
+	// 		},
+	// 		Probe: &network.SubResource{
+	// 			ID: to.StringPtr(fmt.Sprintf("/%s/%s/probes/%s", idPrefix, lbName, probeName)),
+	// 		},
+	// 	},
+	// }
+	// rules = append(rules, defaultRule)
 
 	// portMappings := make([]containerinstance.Port, 0)
 	// containerPortMappings := make([]containerinstance.ContainerPort, 0)
@@ -323,11 +334,15 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 				ingressCfg := ingress.(map[string]interface{})
 				for cidr := range ingressCfg {
 					if tcp, tcpOk := ingressCfg[cidr].(map[string]interface{})["tcp"].([]interface{}); tcpOk {
-						for i := range tcp {
-							port := int32(tcp[i].(float64))
+
+						for x, i := range tcp {
+							port := int32(i.(float64))
+							if x == 0 {
+								healthCheckPort = port
+							}
 
 							rule := network.LoadBalancingRule{
-								Name: to.StringPtr(fmt.Sprintf("lbRuleTcp%d", i)),
+								Name: to.StringPtr(fmt.Sprintf("lbRuleTcp%d", x)),
 								LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
 									Protocol:             network.TransportProtocolTCP,
 									FrontendPort:         to.Int32Ptr(port),
@@ -347,6 +362,23 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 								},
 							}
 							rules = append(rules, rule)
+
+							// natRule := network.InboundNatRule{
+							// 	Name: to.StringPtr(fmt.Sprintf("natRuleTcp%d", x)),
+							// 	InboundNatRulePropertiesFormat: &network.InboundNatRulePropertiesFormat{
+							// 		Protocol:             network.TransportProtocolTCP,
+							// 		FrontendPort:         to.Int32Ptr(port),
+							// 		BackendPort:          to.Int32Ptr(port),
+							// 		EnableFloatingIP:     to.BoolPtr(false),
+							// 		IdleTimeoutInMinutes: to.Int32Ptr(5),
+							// 		FrontendIPConfiguration: &network.SubResource{
+							// 			ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+							// 		},
+							// 	},
+							// }
+							// inboundNatRules = append(inboundNatRules, natRule)
+
+							// outboundRules = append()
 
 						}
 					}
@@ -376,6 +408,21 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 								},
 							}
 							rules = append(rules, rule)
+
+							// natRule := network.InboundNatRule{
+							// 	Name: to.StringPtr(fmt.Sprintf("natRuleUdp%d", i)),
+							// 	InboundNatRulePropertiesFormat: &network.InboundNatRulePropertiesFormat{
+							// 		Protocol:             network.TransportProtocolUDP,
+							// 		FrontendPort:         to.Int32Ptr(port),
+							// 		BackendPort:          to.Int32Ptr(port),
+							// 		EnableFloatingIP:     to.BoolPtr(false),
+							// 		IdleTimeoutInMinutes: to.Int32Ptr(5),
+							// 		FrontendIPConfiguration: &network.SubResource{
+							// 			ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
+							// 		},
+							// 	},
+							// }
+							// inboundNatRules = append(inboundNatRules, natRule)
 
 						}
 					}
@@ -408,43 +455,16 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 					{
 						Name: &probeName,
 						ProbePropertiesFormat: &network.ProbePropertiesFormat{
-							Protocol:          network.ProbeProtocolHTTP,
-							Port:              to.Int32Ptr(80),
-							IntervalInSeconds: to.Int32Ptr(15),
-							NumberOfProbes:    to.Int32Ptr(4),
-							RequestPath:       to.StringPtr("healthprobe.aspx"),
+							Protocol:          network.ProbeProtocolTCP,
+							Port:              to.Int32Ptr(healthCheckPort),
+							IntervalInSeconds: to.Int32Ptr(30),
+							NumberOfProbes:    to.Int32Ptr(2),
 						},
 					},
 				},
 				LoadBalancingRules: &rules,
-				InboundNatRules: &[]network.InboundNatRule{
-					{
-						Name: to.StringPtr("natRule1"),
-						InboundNatRulePropertiesFormat: &network.InboundNatRulePropertiesFormat{
-							Protocol:             network.TransportProtocolTCP,
-							FrontendPort:         to.Int32Ptr(21),
-							BackendPort:          to.Int32Ptr(22),
-							EnableFloatingIP:     to.BoolPtr(false),
-							IdleTimeoutInMinutes: to.Int32Ptr(4),
-							FrontendIPConfiguration: &network.SubResource{
-								ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
-							},
-						},
-					},
-					{
-						Name: to.StringPtr("natRule2"),
-						InboundNatRulePropertiesFormat: &network.InboundNatRulePropertiesFormat{
-							Protocol:             network.TransportProtocolTCP,
-							FrontendPort:         to.Int32Ptr(23),
-							BackendPort:          to.Int32Ptr(22),
-							EnableFloatingIP:     to.BoolPtr(false),
-							IdleTimeoutInMinutes: to.Int32Ptr(4),
-							FrontendIPConfiguration: &network.SubResource{
-								ID: to.StringPtr(fmt.Sprintf("/%s/%s/frontendIPConfigurations/%s", idPrefix, lbName, frontEndIPConfigName)),
-							},
-						},
-					},
-				},
+				InboundNatRules:    &inboundNatRules,
+				// OutboundRules:      &outboundRules,
 			},
 		})
 
