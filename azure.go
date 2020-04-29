@@ -73,6 +73,21 @@ func NewVirtualNetworksClient(subscriptionID string) (network.VirtualNetworksCli
 	}
 }
 
+// DeleteContainer deletes container by its ID
+func DeleteContainer(ctx context.Context, subscriptionID string, resourceGroupName string, containerID string) (err error) {
+	cgClient, err := NewContainerGroupsClient(subscriptionID)
+	if err != nil {
+		return fmt.Errorf("Unable to get container client: %s; ", err.Error())
+	}
+
+	_, err = cgClient.Delete(ctx, resourceGroupName, containerID)
+	if err != nil {
+		return fmt.Errorf("Unable to delete container: %s; ", err.Error())
+	}
+
+	return nil
+}
+
 // StartContainer starts a new node in network
 func StartContainer(ctx context.Context,
 	subscriptionID string,
@@ -86,13 +101,13 @@ func StartContainer(ctx context.Context,
 	subnetIds []string,
 	environment map[string]interface{},
 	security map[string]interface{},
-) (ids []string, err error) {
+) (ids []string, containerIds []string, err error) {
 	if image == nil {
-		return ids, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", region)
+		return ids, containerIds, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", region)
 	}
 
 	if security != nil && len(security) == 0 {
-		return ids, fmt.Errorf("Unable to start container w/o security config")
+		return ids, containerIds, fmt.Errorf("Unable to start container w/o security config")
 	}
 
 	env := make([]containerinstance.EnvironmentVariable, 0)
@@ -149,7 +164,7 @@ func StartContainer(ctx context.Context,
 	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(subscriptionID)
 	if err != nil {
-		return ids, fmt.Errorf("Unable to get container client: %s; ", err.Error())
+		return ids, containerIds, fmt.Errorf("Unable to get container client: %s; ", err.Error())
 	}
 
 	future, err := cgClient.CreateOrUpdate(
@@ -191,22 +206,43 @@ func StartContainer(ctx context.Context,
 
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return []string{}, err
+		return []string{}, []string{}, err
 	}
 
 	err = future.WaitForCompletionRef(ctx, cgClient.Client)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return []string{}, err
+		return []string{}, []string{}, err
 	}
 
 	containerGroup, err := future.Result(cgClient)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return []string{}, err
+		return []string{}, []string{}, err
 	}
 
-	return []string{*containerGroup.ID}, nil
+	return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
+}
+
+// DeleteResourceGroup deletes resource group
+func DeleteResourceGroup(ctx context.Context, subscriptionID, name string) (result bool, err error) {
+	gClient, err := NewResourceGroupsClient(subscriptionID)
+	if err != nil {
+		return false, fmt.Errorf("failed to init resource groups client; %s", err.Error())
+	}
+	future, err := gClient.Delete(ctx, name)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete resource group; %s", err.Error())
+	}
+
+	err = future.WaitForCompletionRef(ctx, gClient.Client)
+	if err != nil {
+		log.Warningf("failed to delete resource group; %s", err.Error())
+		return false, fmt.Errorf("failed to delete resource group; %s", err.Error())
+	}
+	res, err := future.Result(gClient)
+
+	return res.HasHTTPStatus(200), nil
 }
 
 // UpsertResourceGroup upserts a resource group for the given params
@@ -226,6 +262,27 @@ func UpsertResourceGroup(ctx context.Context, subscriptionID, region, name strin
 	}
 
 	return &group, nil
+}
+
+// DeleteVirtuaNetwork deletes virtual network
+func DeleteVirtuaNetwork(ctx context.Context, subscriptionID, resourceGroupName, virtualNetworkName string) (result bool, err error) {
+	vnetClient, err := NewVirtualNetworksClient(subscriptionID)
+	if err != nil {
+		return false, fmt.Errorf("failed to init virtual network; %s", err.Error())
+	}
+	future, err := vnetClient.Delete(ctx, resourceGroupName, virtualNetworkName)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete virtual network; %s", err.Error())
+	}
+
+	err = future.WaitForCompletionRef(ctx, vnetClient.Client)
+	if err != nil {
+		log.Warningf("failed to delete rvirtual network; %s", err.Error())
+		return false, fmt.Errorf("failed to delete resource group; %s", err.Error())
+	}
+	res, err := future.Result(vnetClient)
+
+	return res.HasHTTPStatus(200), nil
 }
 
 // UpsertVirtualNetwork upserts a resource group for the given params
@@ -273,6 +330,27 @@ func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, 
 	}
 
 	return &vnet, nil
+}
+
+// DeleteLoadBalancer deletes load balancer from azure
+func DeleteLoadBalancer(ctx context.Context, lbName, groupName, subscriptionID string) (result bool, err error) {
+	lbClient, err := NewLoadBalancerClient(subscriptionID)
+	if err != nil {
+		return false, fmt.Errorf("failed to create load balancer client; %s", err.Error())
+	}
+
+	future, err := lbClient.Delete(ctx, groupName, lbName)
+	if err != nil {
+		return false, fmt.Errorf("cannot delete load balancer: %v", err)
+	}
+
+	err = future.WaitForCompletionRef(ctx, lbClient.Client)
+	if err != nil {
+		return false, fmt.Errorf("cannot get load balancer create or update future response: %v", err)
+	}
+
+	response, err := future.Result(lbClient)
+	return response.HasHTTPStatus(200), err
 }
 
 // CreateLoadBalancer creates load balancer for a group
