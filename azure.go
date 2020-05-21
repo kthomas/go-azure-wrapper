@@ -88,27 +88,51 @@ func DeleteContainer(ctx context.Context, subscriptionID string, resourceGroupNa
 	return nil
 }
 
+// AzureContainerCreateParams is a struct representing the params needed to start an Azure container.
+type AzureContainerCreateParams struct {
+	context           context.Context
+	subscriptionID    string
+	region            string
+	resourceGroupName string
+	image             *string
+	virtualNetworkID  *string
+	cpu               *int64
+	memory            *int64
+	entrypoint        []*string
+	securityGroupIds  []string
+	subnetIds         []string
+	environment       map[string]interface{}
+	security          map[string]interface{}
+}
+
+// AzureContainerCreateResult is a struct representing the response from Azure container creation.
+type AzureContainerCreateResult struct {
+	ids          []string
+	containerIds []string
+	err          error
+}
+
 // StartContainer starts a new node in network
-func StartContainer(ctx context.Context,
-	subscriptionID string,
-	region string,
-	resourceGroupName string,
-	image *string,
-	virtualNetworkID *string,
-	cpu, memory *int64,
-	entrypoint []*string,
-	securityGroupIds []string,
-	subnetIds []string,
-	environment map[string]interface{},
-	security map[string]interface{},
-) (ids []string, containerIds []string, err error) {
-	if image == nil {
-		return ids, containerIds, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", region)
+func StartContainer(accp *AzureContainerCreateParams) (result *AzureContainerCreateResult) {
+
+	if accp.image == nil {
+		return &AzureContainerCreateResult{err: fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", accp.region)}
 	}
 
+	security := accp.security
 	if security != nil && len(security) == 0 {
-		return ids, containerIds, fmt.Errorf("Unable to start container w/o security config")
+		return &AzureContainerCreateResult{err: fmt.Errorf("Unable to start container w/o security config")}
 	}
+
+	ctx := accp.context
+	subscriptionID := accp.subscriptionID
+	region := accp.region
+	resourceGroupName := accp.resourceGroupName
+	// virtualNetworkID *string,
+	cpu := accp.cpu
+	memory := accp.memory
+
+	environment := accp.environment
 
 	env := make([]containerinstance.EnvironmentVariable, 0)
 	for k := range environment {
@@ -164,7 +188,7 @@ func StartContainer(ctx context.Context,
 	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(subscriptionID)
 	if err != nil {
-		return ids, containerIds, fmt.Errorf("Unable to get container client: %s; ", err.Error())
+		return &AzureContainerCreateResult{err: fmt.Errorf("Unable to get container client: %s; ", err.Error())}
 	}
 
 	future, err := cgClient.CreateOrUpdate(
@@ -185,7 +209,7 @@ func StartContainer(ctx context.Context,
 						Name: to.StringPtr(containerName.String()),
 						ContainerProperties: &containerinstance.ContainerProperties{
 							EnvironmentVariables: &env,
-							Image:                image,
+							Image:                accp.image,
 							Ports:                &containerPortMappings,
 							Resources: &containerinstance.ResourceRequirements{
 								Limits: &containerinstance.ResourceLimits{
@@ -206,22 +230,23 @@ func StartContainer(ctx context.Context,
 
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return []string{}, []string{}, err
+		return &AzureContainerCreateResult{err: err}
 	}
 
 	err = future.WaitForCompletionRef(ctx, cgClient.Client)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return []string{}, []string{}, err
+		return &AzureContainerCreateResult{err: err}
 	}
 
 	containerGroup, err := future.Result(cgClient)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return []string{}, []string{}, err
+		return &AzureContainerCreateResult{err: err}
 	}
 
-	return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
+	return &AzureContainerCreateResult{ids: []string{*containerGroup.ID}, containerIds: []string{*containerGroup.Name}}
+	// return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
 }
 
 // DeleteResourceGroup deletes resource group
