@@ -3,6 +3,7 @@ package azurewrapper
 import (
 	"context"
 	"fmt"
+	"time"
 
 	uuid "github.com/kthomas/go.uuid"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/go-autorest/autorest/to"
+
+	provide "github.com/provideservices/provide-go"
 )
 
 // NewContainerGroupsClient is creating a container group client
@@ -113,26 +116,26 @@ type AzureContainerCreateResult struct {
 }
 
 // StartContainer starts a new node in network
-func StartContainer(accp *AzureContainerCreateParams) (result *AzureContainerCreateResult) {
-
-	if accp.image == nil {
-		return &AzureContainerCreateResult{err: fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", accp.region)}
+func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) (result *provide.ContainerCreateResult) {
+	if cp.Image == nil {
+		return &provide.ContainerCreateResult{err: fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", cp.Region)}
 	}
 
-	security := accp.security
+	security := cp.Security
 	if security != nil && len(security) == 0 {
-		return &AzureContainerCreateResult{err: fmt.Errorf("Unable to start container w/o security config")}
+		return &provide.ContainerCreateResult{err: fmt.Errorf("Unable to start container w/o security config")}
 	}
 
-	ctx := accp.context
-	subscriptionID := accp.subscriptionID
-	region := accp.region
-	resourceGroupName := accp.resourceGroupName
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	defer cancel()
+	subscriptionID := *tc.AzureSubscriptionID
+	region := cp.Region
+	resourceGroupName := cp.ResourceGroupName
 	// virtualNetworkID *string,
-	cpu := accp.cpu
-	memory := accp.memory
+	cpu := cp.CPU
+	memory := cp.Memory
 
-	environment := accp.environment
+	environment := cp.Environment
 
 	env := make([]containerinstance.EnvironmentVariable, 0)
 	for k := range environment {
@@ -188,7 +191,7 @@ func StartContainer(accp *AzureContainerCreateParams) (result *AzureContainerCre
 	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(subscriptionID)
 	if err != nil {
-		return &AzureContainerCreateResult{err: fmt.Errorf("Unable to get container client: %s; ", err.Error())}
+		return &provide.ContainerCreateResult{err: fmt.Errorf("Unable to get container client: %s; ", err.Error())}
 	}
 
 	future, err := cgClient.CreateOrUpdate(
@@ -209,7 +212,7 @@ func StartContainer(accp *AzureContainerCreateParams) (result *AzureContainerCre
 						Name: to.StringPtr(containerName.String()),
 						ContainerProperties: &containerinstance.ContainerProperties{
 							EnvironmentVariables: &env,
-							Image:                accp.image,
+							Image:                cp.Image,
 							Ports:                &containerPortMappings,
 							Resources: &containerinstance.ResourceRequirements{
 								Limits: &containerinstance.ResourceLimits{
@@ -230,22 +233,22 @@ func StartContainer(accp *AzureContainerCreateParams) (result *AzureContainerCre
 
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &AzureContainerCreateResult{err: err}
+		return &provide.ContainerCreateResult{err: err}
 	}
 
 	err = future.WaitForCompletionRef(ctx, cgClient.Client)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &AzureContainerCreateResult{err: err}
+		return &provide.ContainerCreateResult{err: err}
 	}
 
 	containerGroup, err := future.Result(cgClient)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &AzureContainerCreateResult{err: err}
+		return &provide.ContainerCreateResult{err: err}
 	}
 
-	return &AzureContainerCreateResult{ids: []string{*containerGroup.ID}, containerIds: []string{*containerGroup.Name}}
+	return &provide.ContainerCreateResult{containerIds: []string{*containerGroup.Name}}
 	// return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
 }
 
