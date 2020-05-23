@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-12-01/network"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-05-01/resources"
 	"github.com/Azure/go-autorest/autorest"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/go-autorest/autorest/to"
 
@@ -18,9 +19,9 @@ import (
 )
 
 // NewContainerGroupsClient is creating a container group client
-func NewContainerGroupsClient(subscriptionID string) (containerinstance.ContainerGroupsClient, error) {
-	client := containerinstance.NewContainerGroupsClient(subscriptionID)
-	if auth, err := GetAuthorizer(); err == nil {
+func NewContainerGroupsClient(tc *provide.TargetCredentials) (containerinstance.ContainerGroupsClient, error) {
+	client := containerinstance.NewContainerGroupsClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
 		client.Authorizer = *auth
 		return client, nil
 	} else {
@@ -29,9 +30,9 @@ func NewContainerGroupsClient(subscriptionID string) (containerinstance.Containe
 }
 
 // NewLoadBalancerClient is creating a load balancer client
-func NewLoadBalancerClient(subscriptionID string) (network.LoadBalancersClient, error) {
-	client := network.NewLoadBalancersClient(subscriptionID)
-	if auth, err := GetAuthorizer(); err == nil {
+func NewLoadBalancerClient(tc *provide.TargetCredentials) (network.LoadBalancersClient, error) {
+	client := network.NewLoadBalancersClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
 		client.Authorizer = *auth
 		return client, nil
 	} else {
@@ -40,14 +41,32 @@ func NewLoadBalancerClient(subscriptionID string) (network.LoadBalancersClient, 
 }
 
 // NewAuthorizer initializes a new authorizer from the configured environment
-func newAuthorizer() (autorest.Authorizer, error) {
+func newAuthorizer(tc *provide.TargetCredentials) (autorest.Authorizer, error) {
 	// FIXME-- pass args in
-	return auth.NewAuthorizerFromEnvironment()
+	// return auth.NewAuthorizerFromEnvironment()
+
+	//settings, err := auth.GetSettingsFromEnvironment()
+
+	settings := auth.EnvironmentSettings{
+		Values: map[string]string{},
+	}
+	settings.Values["AZURE_SUBSCRIPTION_ID"] = *tc.AzureSubscriptionID
+	settings.Values["AZURE_TENANT_ID"] = *tc.AzureTenantID
+	settings.Values["AZURE_CLIENT_ID"] = *tc.AzureClientID
+	settings.Values["AZURE_CLIENT_SECRET"] = *tc.AzureClientSecret
+	settings.Environment = azure.PublicCloud
+	settings.Values["AZURE_AD_RESOURCE"] = settings.Environment.ResourceManagerEndpoint
+
+	// if err != nil {
+	// 	return nil, err
+	// }
+	return settings.GetAuthorizer()
+
 }
 
 // GetAuthorizer initializes new authorizer or returns existing
-func GetAuthorizer() (*autorest.Authorizer, error) {
-	authorizer, err := newAuthorizer()
+func GetAuthorizer(tc *provide.TargetCredentials) (*autorest.Authorizer, error) {
+	authorizer, err := newAuthorizer(tc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve Azure authorizer; %s", err.Error())
 	}
@@ -55,9 +74,9 @@ func GetAuthorizer() (*autorest.Authorizer, error) {
 }
 
 // NewResourceGroupsClient initializes and returns an instance of the resource groups API client
-func NewResourceGroupsClient(subscriptionID string) (resources.GroupsClient, error) {
-	client := resources.NewGroupsClient(subscriptionID)
-	if auth, err := GetAuthorizer(); err == nil {
+func NewResourceGroupsClient(tc *provide.TargetCredentials) (resources.GroupsClient, error) {
+	client := resources.NewGroupsClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
 		client.Authorizer = *auth
 		return client, nil
 	} else {
@@ -66,9 +85,9 @@ func NewResourceGroupsClient(subscriptionID string) (resources.GroupsClient, err
 }
 
 // NewVirtualNetworksClient initializes and returns an instance of the Azure vnet API client
-func NewVirtualNetworksClient(subscriptionID string) (network.VirtualNetworksClient, error) {
-	client := network.NewVirtualNetworksClient(subscriptionID)
-	if auth, err := GetAuthorizer(); err == nil {
+func NewVirtualNetworksClient(tc *provide.TargetCredentials) (network.VirtualNetworksClient, error) {
+	client := network.NewVirtualNetworksClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
 		client.Authorizer = *auth
 		return client, nil
 	} else {
@@ -77,8 +96,8 @@ func NewVirtualNetworksClient(subscriptionID string) (network.VirtualNetworksCli
 }
 
 // DeleteContainer deletes container by its ID
-func DeleteContainer(ctx context.Context, subscriptionID string, resourceGroupName string, containerID string) (err error) {
-	cgClient, err := NewContainerGroupsClient(subscriptionID)
+func DeleteContainer(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName string, containerID string) (err error) {
+	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
 		return fmt.Errorf("Unable to get container client: %s; ", err.Error())
 	}
@@ -118,17 +137,16 @@ type AzureContainerCreateResult struct {
 // StartContainer starts a new node in network
 func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) (result *provide.ContainerCreateResult) {
 	if cp.Image == nil {
-		return &provide.ContainerCreateResult{err: fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", cp.Region)}
+		return &provide.ContainerCreateResult{Err: fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", cp.Region)}
 	}
 
 	security := cp.Security
 	if security != nil && len(security) == 0 {
-		return &provide.ContainerCreateResult{err: fmt.Errorf("Unable to start container w/o security config")}
+		return &provide.ContainerCreateResult{Err: fmt.Errorf("Unable to start container w/o security config")}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
-	subscriptionID := *tc.AzureSubscriptionID
 	region := cp.Region
 	resourceGroupName := cp.ResourceGroupName
 	// virtualNetworkID *string,
@@ -189,9 +207,9 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 
 	containerGroupName, _ := uuid.NewV4()
 	containerName, _ := uuid.NewV4()
-	cgClient, err := NewContainerGroupsClient(subscriptionID)
+	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
-		return &provide.ContainerCreateResult{err: fmt.Errorf("Unable to get container client: %s; ", err.Error())}
+		return &provide.ContainerCreateResult{Err: fmt.Errorf("Unable to get container client: %s; ", err.Error())}
 	}
 
 	future, err := cgClient.CreateOrUpdate(
@@ -233,28 +251,28 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &provide.ContainerCreateResult{err: err}
+		return &provide.ContainerCreateResult{Err: err}
 	}
 
 	err = future.WaitForCompletionRef(ctx, cgClient.Client)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &provide.ContainerCreateResult{err: err}
+		return &provide.ContainerCreateResult{Err: err}
 	}
 
 	containerGroup, err := future.Result(cgClient)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &provide.ContainerCreateResult{err: err}
+		return &provide.ContainerCreateResult{Err: err}
 	}
 
-	return &provide.ContainerCreateResult{containerIds: []string{*containerGroup.Name}}
+	return &provide.ContainerCreateResult{ContainerIds: []string{*containerGroup.Name}}
 	// return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
 }
 
 // DeleteResourceGroup deletes resource group
-func DeleteResourceGroup(ctx context.Context, subscriptionID, name string) (result bool, err error) {
-	gClient, err := NewResourceGroupsClient(subscriptionID)
+func DeleteResourceGroup(ctx context.Context, tc *provide.TargetCredentials, name string) (result bool, err error) {
+	gClient, err := NewResourceGroupsClient(tc)
 	if err != nil {
 		return false, fmt.Errorf("failed to init resource groups client; %s", err.Error())
 	}
@@ -274,8 +292,8 @@ func DeleteResourceGroup(ctx context.Context, subscriptionID, name string) (resu
 }
 
 // UpsertResourceGroup upserts a resource group for the given params
-func UpsertResourceGroup(ctx context.Context, subscriptionID, region, name string) (*resources.Group, error) {
-	gClient, err := NewResourceGroupsClient(subscriptionID)
+func UpsertResourceGroup(ctx context.Context, tc *provide.TargetCredentials, region, name string) (*string, error) {
+	gClient, err := NewResourceGroupsClient(tc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init resource groups client; %s", err.Error())
 	}
@@ -289,12 +307,12 @@ func UpsertResourceGroup(ctx context.Context, subscriptionID, region, name strin
 		return nil, fmt.Errorf("failed to upsert resource group; %s", err.Error())
 	}
 
-	return &group, nil
+	return group.ID, nil
 }
 
 // DeleteVirtuaNetwork deletes virtual network
-func DeleteVirtuaNetwork(ctx context.Context, subscriptionID, resourceGroupName, virtualNetworkName string) (result bool, err error) {
-	vnetClient, err := NewVirtualNetworksClient(subscriptionID)
+func DeleteVirtuaNetwork(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, virtualNetworkName string) (result bool, err error) {
+	vnetClient, err := NewVirtualNetworksClient(tc)
 	if err != nil {
 		return false, fmt.Errorf("failed to init virtual network; %s", err.Error())
 	}
@@ -314,8 +332,8 @@ func DeleteVirtuaNetwork(ctx context.Context, subscriptionID, resourceGroupName,
 }
 
 // UpsertVirtualNetwork upserts a resource group for the given params
-func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, region string) (*network.VirtualNetwork, error) {
-	vnetClient, _ := NewVirtualNetworksClient(subscriptionID)
+func UpsertVirtualNetwork(ctx context.Context, tc *provide.TargetCredentials, groupName, name, region string) (*network.VirtualNetwork, error) {
+	vnetClient, _ := NewVirtualNetworksClient(tc)
 	future, err := vnetClient.CreateOrUpdate(
 		ctx,
 		groupName,
@@ -361,8 +379,8 @@ func UpsertVirtualNetwork(ctx context.Context, subscriptionID, groupName, name, 
 }
 
 // DeleteLoadBalancer deletes load balancer from azure
-func DeleteLoadBalancer(ctx context.Context, lbName, groupName, subscriptionID string) (result bool, err error) {
-	lbClient, err := NewLoadBalancerClient(subscriptionID)
+func DeleteLoadBalancer(ctx context.Context, lbName, groupName string, tc *provide.TargetCredentials) (result bool, err error) {
+	lbClient, err := NewLoadBalancerClient(tc)
 	if err != nil {
 		return false, fmt.Errorf("failed to create load balancer client; %s", err.Error())
 	}
@@ -382,7 +400,7 @@ func DeleteLoadBalancer(ctx context.Context, lbName, groupName, subscriptionID s
 }
 
 // CreateLoadBalancer creates load balancer for a group
-func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupName, subscriptionID string, security map[string]interface{}) (lb *network.LoadBalancer, err error) {
+func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupName string, tc *provide.TargetCredentials, security map[string]interface{}) (lb *network.LoadBalancer, err error) {
 	if security != nil && len(security) == 0 {
 		return lb, fmt.Errorf("Unable to start container w/o security config")
 	}
@@ -390,15 +408,15 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 	probeName := "probe"
 	frontEndIPConfigName := "fip"
 	backEndAddressPoolName := "backEndPool"
-	idPrefix := fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/loadBalancers", subscriptionID, groupName)
+	idPrefix := fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/loadBalancers", *tc.AzureSubscriptionID, groupName)
 
-	pip, err := GetPublicIP(ctx, pipName, groupName, subscriptionID)
+	pip, err := GetPublicIP(ctx, pipName, groupName, tc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get public IP address; %s", err.Error())
 	}
 	println(fmt.Sprintf("ip: %+v", pip))
 
-	lbClient, err := NewLoadBalancerClient(subscriptionID)
+	lbClient, err := NewLoadBalancerClient(tc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create load balancer client; %s", err.Error())
 	}
@@ -588,9 +606,9 @@ func CreateLoadBalancer(ctx context.Context, lbName, location, pipName, groupNam
 }
 
 // NewIPClient creates public IP addresses client
-func NewIPClient(subscriptionID string) (network.PublicIPAddressesClient, error) {
-	client := network.NewPublicIPAddressesClient(subscriptionID)
-	if auth, err := GetAuthorizer(); err == nil {
+func NewIPClient(tc *provide.TargetCredentials) (network.PublicIPAddressesClient, error) {
+	client := network.NewPublicIPAddressesClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
 		client.Authorizer = *auth
 		return client, nil
 	} else {
@@ -599,14 +617,14 @@ func NewIPClient(subscriptionID string) (network.PublicIPAddressesClient, error)
 }
 
 // GetPublicIP returns an existing public IP
-func GetPublicIP(ctx context.Context, ipName, groupName, subscriptionID string) (network.PublicIPAddress, error) {
-	ipClient, _ := NewIPClient(subscriptionID)
+func GetPublicIP(ctx context.Context, ipName, groupName string, tc *provide.TargetCredentials) (network.PublicIPAddress, error) {
+	ipClient, _ := NewIPClient(tc)
 	return ipClient.Get(ctx, groupName, ipName, "")
 }
 
 // CreatePublicIP creates public IP address
-func CreatePublicIP(ctx context.Context, ipName, location, groupName, subscriptionID string) (ip *network.PublicIPAddress, err error) {
-	ipClient, err := NewIPClient(subscriptionID)
+func CreatePublicIP(ctx context.Context, ipName, location, groupName string, tc *provide.TargetCredentials) (ip *network.PublicIPAddress, err error) {
+	ipClient, err := NewIPClient(tc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init public IP client; %s", err.Error())
 	}
