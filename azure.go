@@ -135,14 +135,14 @@ type AzureContainerCreateResult struct {
 }
 
 // StartContainer starts a new node in network
-func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) (result *provide.ContainerCreateResult) {
+func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) (result *provide.ContainerCreateResult, err error) {
 	if cp.Image == nil {
-		return &provide.ContainerCreateResult{Err: fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", cp.Region)}
+		return nil, fmt.Errorf("Unable to start container in region: %s; container can only be started with a valid image or task definition", cp.Region)
 	}
 
 	security := cp.Security
 	if security != nil && len(security) == 0 {
-		return &provide.ContainerCreateResult{Err: fmt.Errorf("Unable to start container w/o security config")}
+		return nil, fmt.Errorf("Unable to start container w/o security config")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
@@ -209,7 +209,8 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
-		return &provide.ContainerCreateResult{Err: fmt.Errorf("Unable to get container client: %s; ", err.Error())}
+		log.Warningf("Unable to get container client: %s; ", err.Error())
+		return nil, err
 	}
 
 	future, err := cgClient.CreateOrUpdate(
@@ -251,22 +252,33 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &provide.ContainerCreateResult{Err: err}
+		return nil, err
 	}
 
 	err = future.WaitForCompletionRef(ctx, cgClient.Client)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &provide.ContainerCreateResult{Err: err}
+		return nil, err
 	}
 
 	containerGroup, err := future.Result(cgClient)
 	if err != nil {
 		log.Warningf("failed to create container group; %s", err.Error())
-		return &provide.ContainerCreateResult{Err: err}
+		return nil, err
 	}
 
-	return &provide.ContainerCreateResult{ContainerIds: []string{*containerGroup.Name}}
+	// containerProperties := *(containerGroup.Containers)
+	interfaces := make([]*provide.NetworkInterface, 1)
+	intf := provide.NetworkInterface{
+		Host:        containerGroup.ContainerGroupProperties.IPAddress.Fqdn,
+		IPv4:        containerGroup.ContainerGroupProperties.IPAddress.IP,
+		IPv6:        nil,
+		PrivateIPv4: nil,
+		PrivateIPv6: nil,
+	}
+	interfaces[0] = &intf
+
+	return &provide.ContainerCreateResult{ContainerIds: []string{*containerGroup.Name}, ContainerInterfaces: interfaces}, nil
 	// return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
 }
 

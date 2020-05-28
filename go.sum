@@ -302,6 +302,8 @@ github.com/provideservices/provide-go v0.0.0-20200522205241-74077390e8bb h1:i8Oq
 github.com/provideservices/provide-go v0.0.0-20200522205241-74077390e8bb/go.mod h1:9pehDFAFDec95Efx8mgC3rG7Ko2mXC13AWGJby0RwvM=
 github.com/provideservices/provide-go v0.0.0-20200523141458-b060cca21864 h1:k5/P21fSCV4Pi9kuD5WD1O/x3Bluy+b5jNstNmMo/FM=
 github.com/provideservices/provide-go v0.0.0-20200523141458-b060cca21864/go.mod h1:9pehDFAFDec95Efx8mgC3rG7Ko2mXC13AWGJby0RwvM=
+github.com/provideservices/provide-go v0.0.0-20200528112957-3754265a5550 h1:ihFJq/TPw7DRGN22zAkbR8qJraC6dBLVQ1Jm0ezjIMg=
+github.com/provideservices/provide-go v0.0.0-20200528112957-3754265a5550/go.mod h1:9pehDFAFDec95Efx8mgC3rG7Ko2mXC13AWGJby0RwvM=
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/rjeczalik/notify v0.9.2/go.mod h1:aErll2f0sUX9PXZnVNyeiObbmTlk5jnMoCa4QEjJeqM=
 github.com/rogpeppe/go-internal v1.3.2 h1:XU784Pr0wdahMY2bYcyK6N1KuaRAdLtqD4qd8D18Bfs=

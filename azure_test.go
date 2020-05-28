@@ -21,10 +21,10 @@ import (
 // }
 
 var tc = &provide.TargetCredentials{
-	AzureSubscriptionID: to.StringPtr(""),
-	AzureClientID:       to.StringPtr(""),
-	AzureClientSecret:   to.StringPtr(""),
-	AzureTenantID:       to.StringPtr(""),
+	AzureTenantID:       to.StringPtr("28b2b885-0c05-42de-80fc-4740f934129a"),
+	AzureSubscriptionID: to.StringPtr("f7cc4b84-6fb8-40c5-be1f-a63f65a8f17c"),
+	AzureClientID:       to.StringPtr("3152275b-40a9-4266-aad7-05bac4804e31"),
+	AzureClientSecret:   to.StringPtr("7/fjmycak?Iv:y?MMzFuTbHT57UAKCw9"),
 }
 
 func TestStartContainer(t *testing.T) {
@@ -67,21 +67,24 @@ func TestStartContainer(t *testing.T) {
 	}
 
 	// container, ids, err := StartContainer(params)
-	result := StartContainer(params, tc)
-	if result.Err != nil {
-		panic(fmt.Sprintf("%s", result.Err.Error()))
+	result, err := StartContainer(params, tc)
+	if err != nil {
+		panic(fmt.Sprintf("%s", err.Error()))
 	}
-	println(fmt.Sprintf("container: %+v", result.ContainerIds))
+	println(fmt.Sprintf("container ids: %+v", result.ContainerIds))
+	println(fmt.Sprintf("container network: %+v", result.ContainerInterfaces[0]))
+	println(fmt.Sprintf("container ip: %s", *result.ContainerInterfaces[0].IPv4))
 	id := result.ContainerIds[0]
 	println(fmt.Sprintf("container id: %s", id))
 
-	result = StartContainer(params, tc)
-	if result.Err != nil {
-		panic(fmt.Sprintf("%s", result.Err.Error()))
-	}
-	println(fmt.Sprintf("container: %+v", result.ContainerIds))
-	id = result.ContainerIds[0]
-	println(fmt.Sprintf("container id: %s", id))
+	// result, err = StartContainer(params, tc)
+	// if err != nil {
+	// 	panic(fmt.Sprintf("%s", err.Error()))
+	// }
+	// println(fmt.Sprintf("container: %+v", result.ContainerIds))
+	// println(fmt.Sprintf("container network: %+v", result.ContainerInterfaces[0]))
+	// id = result.ContainerIds[0]
+	// println(fmt.Sprintf("container id: %s", id))
 
 	// id := "af0cca54-5883-4394-b876-db9839e76084"
 	// DeleteContainer(ctx, subscriptionID, groupName, id)

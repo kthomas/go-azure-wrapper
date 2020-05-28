@@ -13,7 +13,7 @@ require (
 	github.com/google/logger v1.1.0 // indirect
 	github.com/kthomas/go-logger v0.0.0-20190616094252-01c360658513
 	github.com/kthomas/go.uuid v1.2.1-0.20190324131420-28d1fa77e9a4
-	github.com/provideservices/provide-go v0.0.0-20200523141458-b060cca21864
+	github.com/provideservices/provide-go v0.0.0-20200528112957-3754265a5550
 	golang.org/x/crypto v0.0.0-20200320181102-891825fb96df // indirect
 	google.golang.org/appengine v1.6.5
 )
