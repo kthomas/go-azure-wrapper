@@ -29,6 +29,17 @@ func NewContainerGroupsClient(tc *provide.TargetCredentials) (containerinstance.
 	}
 }
 
+// NewContainerClient is creating a container group client
+func NewContainerClient(tc *provide.TargetCredentials) (containerinstance.ContainerClient, error) {
+	client := containerinstance.NewContainerClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
+		client.Authorizer = *auth
+		return client, nil
+	} else {
+		return client, err
+	}
+}
+
 // NewLoadBalancerClient is creating a load balancer client
 func NewLoadBalancerClient(tc *provide.TargetCredentials) (network.LoadBalancersClient, error) {
 	client := network.NewLoadBalancersClient(*tc.AzureSubscriptionID)
@@ -95,11 +106,25 @@ func NewVirtualNetworksClient(tc *provide.TargetCredentials) (network.VirtualNet
 	}
 }
 
+func ContainerLogs(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, containerGroupName, containerID string) (logs containerinstance.Logs, err error) {
+	cClient, err := NewContainerClient(tc)
+	if err != nil {
+		return logs, fmt.Errorf("Unable to get container client: %s; ", err.Error())
+	}
+
+	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, to.Int32Ptr(50))
+	if err != nil {
+		return logs, fmt.Errorf("Unable to delete container: %s; ", err.Error())
+	}
+
+	return logs, nil
+}
+
 // DeleteContainer deletes container by its ID
 func DeleteContainer(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName string, containerID string) (err error) {
 	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
-		return fmt.Errorf("Unable to get container client: %s; ", err.Error())
+		return fmt.Errorf("Unable to get container group client: %s; ", err.Error())
 	}
 
 	_, err = cgClient.Delete(ctx, resourceGroupName, containerID)
@@ -209,7 +234,7 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 	containerName, _ := uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
-		log.Warningf("Unable to get container client: %s; ", err.Error())
+		log.Warningf("Unable to get container group client: %s; ", err.Error())
 		return nil, err
 	}
 
