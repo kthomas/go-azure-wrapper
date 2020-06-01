@@ -112,9 +112,9 @@ func ContainerLogs(ctx context.Context, tc *provide.TargetCredentials, resourceG
 		return logs, fmt.Errorf("Unable to get container client: %s; ", err.Error())
 	}
 
-	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, to.Int32Ptr(50))
+	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, to.Int32Ptr(100))
 	if err != nil {
-		return logs, fmt.Errorf("Unable to delete container: %s; ", err.Error())
+		return logs, fmt.Errorf("Unable to get container logs: %s; ", err.Error())
 	}
 
 	return logs, nil
@@ -231,7 +231,7 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 	}
 
 	containerGroupName, _ := uuid.NewV4()
-	containerName, _ := uuid.NewV4()
+	// containerName := cp.Image //uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
 		log.Warningf("Unable to get container group client: %s; ", err.Error())
@@ -253,7 +253,7 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 				OsType: containerinstance.Linux,
 				Containers: &[]containerinstance.Container{
 					{
-						Name: to.StringPtr(containerName.String()),
+						Name: to.StringPtr(containerGroupName.String()),
 						ContainerProperties: &containerinstance.ContainerProperties{
 							EnvironmentVariables: &env,
 							Image:                cp.Image,
