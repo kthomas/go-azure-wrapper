@@ -18,6 +18,11 @@ func init() {
 		if lvl == "" {
 			lvl = "INFO"
 		}
-		log = logger.NewLogger("azurewrapper", lvl, true)
+		var endpoint *string
+		if os.Getenv("SYSLOG_ENDPOINT") != "" {
+			endpt := os.Getenv("SYSLOG_ENDPOINT")
+			endpoint = &endpt
+		}
+		log = logger.NewLogger("azurewrapper", lvl, endpoint)
 	})
 }

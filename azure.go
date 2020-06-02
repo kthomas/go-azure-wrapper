@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/services/containerinstance/mgmt/2018-10-01/containerinstance"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-12-01/network"
+	"github.com/Azure/azure-sdk-for-go/services/preview/blockchain/mgmt/2018-06-01-preview/blockchain"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-05-01/resources"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -15,6 +16,17 @@ import (
 
 	provide "github.com/provideservices/provide-go"
 )
+
+// NewAzureBlockchainMemberClient is creating an azure blockchain member client
+func NewAzureBlockchainMemberClient(tc *provide.TargetCredentials) (blockchain.MembersClient, error) {
+	client := blockchain.NewMembersClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
+		client.Authorizer = *auth
+		return client, nil
+	} else {
+		return client, err
+	}
+}
 
 // NewContainerGroupsClient is creating a container group client
 func NewContainerGroupsClient(tc *provide.TargetCredentials) (containerinstance.ContainerGroupsClient, error) {
