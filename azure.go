@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	uuid "github.com/kthomas/go.uuid"
-
 	"github.com/Azure/azure-sdk-for-go/services/containerinstance/mgmt/2018-10-01/containerinstance"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-12-01/network"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-05-01/resources"
@@ -106,13 +104,20 @@ func NewVirtualNetworksClient(tc *provide.TargetCredentials) (network.VirtualNet
 	}
 }
 
-func ContainerLogs(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, containerGroupName, containerID string) (logs containerinstance.Logs, err error) {
+// ContainerLogs returns container logs of `n` or 100 lines.
+func ContainerLogs(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, containerGroupName, containerID string, n *int32) (logs containerinstance.Logs, err error) {
+	var number int32
+	if n == nil {
+		number = 100
+	} else {
+		number = *n
+	}
 	cClient, err := NewContainerClient(tc)
 	if err != nil {
 		return logs, fmt.Errorf("Unable to get container client: %s; ", err.Error())
 	}
 
-	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, to.Int32Ptr(100))
+	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, to.Int32Ptr(number))
 	if err != nil {
 		return logs, fmt.Errorf("Unable to get container logs: %s; ", err.Error())
 	}
@@ -230,7 +235,7 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 		}
 	}
 
-	containerGroupName, _ := uuid.NewV4()
+	// containerGroupName, _ := uuid.NewV4()
 	// containerName := cp.Image //uuid.NewV4()
 	cgClient, err := NewContainerGroupsClient(tc)
 	if err != nil {
@@ -241,9 +246,9 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 	future, err := cgClient.CreateOrUpdate(
 		ctx,
 		resourceGroupName,
-		containerGroupName.String(),
+		*cp.ContainerGroupName,
 		containerinstance.ContainerGroup{
-			Name:     to.StringPtr(containerGroupName.String()),
+			Name:     cp.ContainerGroupName,
 			Location: &region,
 			ContainerGroupProperties: &containerinstance.ContainerGroupProperties{
 				IPAddress: &containerinstance.IPAddress{
@@ -253,7 +258,7 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 				OsType: containerinstance.Linux,
 				Containers: &[]containerinstance.Container{
 					{
-						Name: to.StringPtr(containerGroupName.String()),
+						Name: cp.ContainerName,
 						ContainerProperties: &containerinstance.ContainerProperties{
 							EnvironmentVariables: &env,
 							Image:                cp.Image,
