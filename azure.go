@@ -28,6 +28,115 @@ func NewAzureBlockchainMemberClient(tc *provide.TargetCredentials) (blockchain.M
 	}
 }
 
+// NewAzureBlockchainMemberClient is creating an azure blockchain member client
+func NewAzureBlockchainTransactionNodesClient(tc *provide.TargetCredentials) (blockchain.TransactionNodesClient, error) {
+	client := blockchain.NewTransactionNodesClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
+		client.Authorizer = *auth
+		return client, nil
+	} else {
+		return client, err
+	}
+}
+
+// CreateTransactionNode creates transation node on blockchain
+func CreateTransactionNode(ctx context.Context, tc *provide.TargetCredentials, blockchainMemberName, transactionNodeName, resourceGroupName string) (result *blockchain.TransactionNode, err error) {
+	tnClient, err := NewAzureBlockchainTransactionNodesClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get transaction nodes client: %s; ", err.Error())
+	}
+
+	future, err := tnClient.Create(ctx, blockchainMemberName, transactionNodeName, resourceGroupName, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create transaction node: %s; ", err.Error())
+	}
+
+	err = future.WaitForCompletionRef(ctx, tnClient.Client)
+	if err != nil {
+		log.Warningf("failed to create transaction node; %s", err.Error())
+		return nil, err
+	}
+
+	node, err := future.Result(tnClient)
+	if err != nil {
+		log.Warningf("failed to create transaction node; %s", err.Error())
+		return nil, err
+	}
+
+	return &node, nil
+}
+
+// CreateBlockchainMember creates member on blockchain provided
+func CreateBlockchainMember(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, blockchainMemberName string) (result *blockchain.Member, err error) {
+	abmClient, err := NewAzureBlockchainMemberClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get blockchain client: %s; ", err.Error())
+	}
+
+	mem := blockchain.Member{
+		Location: to.StringPtr("eastus"),
+		Sku:      &blockchain.Sku{Name: to.StringPtr("B0")},
+		Tags:     map[string]*string{},
+		MemberProperties: &blockchain.MemberProperties{
+			Protocol:          blockchain.ProtocolQuorum,
+			ValidatorNodesSku: &blockchain.MemberNodesSku{Capacity: to.Int32Ptr(1)},
+			Password:          to.StringPtr("Password123$"),
+			Consortium:        to.StringPtr("provide"),
+			// ConsortiumManagementAccountAddress: to.StringPtr("0x12345678"),
+			ConsortiumManagementAccountPassword: to.StringPtr("Provide123$$$$"),
+			// ConsortiumRole:              to.StringPtr("USER"),
+			ConsortiumMemberDisplayName: to.StringPtr("member"),
+			FirewallRules:               &[]blockchain.FirewallRule{blockchain.FirewallRule{RuleName: to.StringPtr("default"), StartIPAddress: to.StringPtr("0.0.0.0"), EndIPAddress: to.StringPtr("255.255.255.255")}},
+		}}
+
+	// req, err := abmClient.CreatePreparer(ctx, blockchainMemberName, resourceGroupName, &mem)
+	// if err != nil {
+	// 	err = autorest.NewErrorWithError(err, "blockchain.MembersClient", "Create", nil, "Failure preparing request")
+	// 	return nil, fmt.Errorf("Unable to get blockchain request: %s; ", err.Error())
+	// }
+
+	// var future blockchain.MembersCreateFuture
+	// resp, err := abmClient.Send(req, azure.DoRetryWithRegistration(abmClient.Client))
+	// if err != nil {
+	// 	return nil, fmt.Errorf("Unable to get blockchain response: %s; ", err.Error())
+	// }
+
+	// future.Future, err = azure.NewFutureFromResponse(resp)
+
+	future, err := abmClient.Create(ctx, blockchainMemberName, resourceGroupName, &mem)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create member: %s; ", err.Error())
+	}
+	log.Warningf("blockchain member create started")
+
+	err = future.WaitForCompletionRef(ctx, abmClient.Client)
+	if err != nil {
+		log.Warningf("failed to create blockchain member; %s", err.Error())
+		return nil, err
+	}
+	log.Warningf("blockchain member create complete")
+
+	// member, err := future.Result(abmClient)
+	// if err != nil {
+	// 	log.Warningf("failed to create abc member; %s", err.Error())
+	// 	return nil, err
+	// }
+
+	return nil, nil
+}
+
+func GetBlockchainMembersList(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName string) (*blockchain.MemberCollectionPage, error) {
+
+	abmClient, err := NewAzureBlockchainMemberClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get blockchain client: %s; ", err.Error())
+	}
+
+	members, err := abmClient.List(ctx, resourceGroupName)
+
+	return &members, err
+}
+
 // NewContainerGroupsClient is creating a container group client
 func NewContainerGroupsClient(tc *provide.TargetCredentials) (containerinstance.ContainerGroupsClient, error) {
 	client := containerinstance.NewContainerGroupsClient(*tc.AzureSubscriptionID)
@@ -118,18 +227,18 @@ func NewVirtualNetworksClient(tc *provide.TargetCredentials) (network.VirtualNet
 
 // ContainerLogs returns container logs of `n` or 100 lines.
 func ContainerLogs(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, containerGroupName, containerID string, n *int32) (logs containerinstance.Logs, err error) {
-	var number int32
-	if n == nil {
-		number = 100
-	} else {
-		number = *n
-	}
+	// var number int32
+	// if n == nil {
+	// 	number = 100
+	// } else {
+	// 	number = *n
+	// }
 	cClient, err := NewContainerClient(tc)
 	if err != nil {
 		return logs, fmt.Errorf("Unable to get container client: %s; ", err.Error())
 	}
 
-	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, to.Int32Ptr(number))
+	logs, err = cClient.ListLogs(ctx, resourceGroupName, containerGroupName, containerID, n)
 	if err != nil {
 		return logs, fmt.Errorf("Unable to get container logs: %s; ", err.Error())
 	}
