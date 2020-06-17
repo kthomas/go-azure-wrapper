@@ -22,6 +22,40 @@ import (
 
 var tc = &provide.TargetCredentials{}
 
+func TestListNodes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	defer cancel()
+
+	resourceGroupName := "blockchain"
+
+	list, err := ListTransactionNodes(ctx, tc, "hellomember", resourceGroupName)
+	if err != nil {
+		println(fmt.Sprintf("cannot list nodes: %v", err.Error()))
+	}
+
+	node := list[0]
+	println(fmt.Sprintf("node: %+v", node))
+	println(fmt.Sprintf("props: %+v", node.TransactionNodeProperties))
+	println(fmt.Sprintf("key: %s", *node.TransactionNodeProperties.PublicKey))
+	println(fmt.Sprintf("dns: %s", *node.TransactionNodeProperties.DNS))
+	// println(fmt.Sprintf("list of nodes: %+v", list))
+}
+
+func TestTransNode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	defer cancel()
+
+	resourceGroupName := "blockchain"
+
+	future, err := CreateTransactionNode(ctx, tc, "hellomember", "hellonode3", resourceGroupName)
+	if err != nil {
+		println(fmt.Sprintf("cannot create node: %v", err.Error()))
+	}
+
+	log.Warningf("blockchain node create complete")
+	println(fmt.Sprintf("future node: %+v", *future))
+}
+
 func TestMemberClient(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
@@ -59,20 +93,20 @@ func TestListMembers(t *testing.T) {
 	println(fmt.Sprintf("member: %+v", *member.MemberProperties.UserName))
 }
 
-func TestTransactionNode(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
-	defer cancel()
+// func TestTransactionNode(t *testing.T) {
+// 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+// 	defer cancel()
 
-	blockchainMemberName := "provide"
-	transactionNodeName := "node1"
-	resourceGroupName := "prvd-abs"
+// 	blockchainMemberName := "provide"
+// 	transactionNodeName := "node1"
+// 	resourceGroupName := "prvd-abs"
 
-	node, err := CreateTransactionNode(ctx, tc, blockchainMemberName, transactionNodeName, resourceGroupName)
-	if err != nil {
-		println(fmt.Sprintf("cannot create node: %v", err.Error()))
-	}
-	println(fmt.Sprintf("node: %+v", *node))
-}
+// 	node, err := CreateTransactionNode(ctx, tc, blockchainMemberName, transactionNodeName, resourceGroupName)
+// 	if err != nil {
+// 		println(fmt.Sprintf("cannot create node: %v", err.Error()))
+// 	}
+// 	println(fmt.Sprintf("node: %+v", *node))
+// }
 
 func TestStartContainer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)

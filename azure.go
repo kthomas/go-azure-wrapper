@@ -40,32 +40,65 @@ func NewAzureBlockchainTransactionNodesClient(tc *provide.TargetCredentials) (bl
 }
 
 // CreateTransactionNode creates transation node on blockchain
-func CreateTransactionNode(ctx context.Context, tc *provide.TargetCredentials, blockchainMemberName, transactionNodeName, resourceGroupName string) (result *blockchain.TransactionNode, err error) {
+func CreateTransactionNode(ctx context.Context, tc *provide.TargetCredentials, blockchainMemberName, transactionNodeName, resourceGroupName string) (result *blockchain.TransactionNodesCreateFuture, err error) {
 	tnClient, err := NewAzureBlockchainTransactionNodesClient(tc)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get transaction nodes client: %s; ", err.Error())
 	}
 
-	future, err := tnClient.Create(ctx, blockchainMemberName, transactionNodeName, resourceGroupName, nil)
+	rules := []blockchain.FirewallRule{
+		blockchain.FirewallRule{
+			RuleName:       to.StringPtr("rule1"),
+			StartIPAddress: to.StringPtr("0.0.0.0"),
+			EndIPAddress:   to.StringPtr("255.255.255.255"),
+		},
+	}
+	node := blockchain.TransactionNode{
+		Location: to.StringPtr("eastus"),
+		TransactionNodeProperties: &blockchain.TransactionNodeProperties{
+			Password:      to.StringPtr("Password123$^"),
+			FirewallRules: &rules,
+		},
+	}
+	future, err := tnClient.Create(ctx, blockchainMemberName, transactionNodeName, resourceGroupName, &node)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to create transaction node: %s; ", err.Error())
 	}
 
-	err = future.WaitForCompletionRef(ctx, tnClient.Client)
-	if err != nil {
-		log.Warningf("failed to create transaction node; %s", err.Error())
-		return nil, err
-	}
+	return &future, nil
 
-	node, err := future.Result(tnClient)
-	if err != nil {
-		log.Warningf("failed to create transaction node; %s", err.Error())
-		return nil, err
-	}
+	// err = future.WaitForCompletionRef(ctx, tnClient.Client)
+	// if err != nil {
+	// 	log.Warningf("failed to create transaction node; %s", err.Error())
+	// 	return nil, err
+	// }
 
-	return &node, nil
+	// resultNode, err := future.Result(tnClient)
+	// if err != nil {
+	// 	log.Warningf("failed to create transaction node; %s", err.Error())
+	// 	return nil, err
+	// }
+
+	// return &resultNode, nil
 }
 
+// ListTransactionNodes returns the list of nodes
+func ListTransactionNodes(ctx context.Context, tc *provide.TargetCredentials, blockchainMemberName, resourceGroupName string) (result []blockchain.TransactionNode, err error) {
+	tnClient, err := NewAzureBlockchainTransactionNodesClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get transaction nodes client: %s; ", err.Error())
+	}
+
+	page, err := tnClient.List(ctx, blockchainMemberName, resourceGroupName)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get transaction nodes list: %s; ", err.Error())
+	}
+
+	nodes := page.Values()
+	return nodes, nil
+}
+
+// CreateBlockchainMemberResult returns result of blockchain member creation
 func CreateBlockchainMemberResult(ctx context.Context, tc *provide.TargetCredentials, future *blockchain.MembersCreateFuture) (result *blockchain.Member, err error) {
 	abmClient, err := NewAzureBlockchainMemberClient(tc)
 	if err != nil {
