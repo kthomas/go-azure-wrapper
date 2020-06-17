@@ -66,8 +66,22 @@ func CreateTransactionNode(ctx context.Context, tc *provide.TargetCredentials, b
 	return &node, nil
 }
 
+func CreateBlockchainMemberResult(ctx context.Context, tc *provide.TargetCredentials, future *blockchain.MembersCreateFuture) (result *blockchain.Member, err error) {
+	abmClient, err := NewAzureBlockchainMemberClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get blockchain client: %s; ", err.Error())
+	}
+
+	member, err := future.Result(abmClient)
+	if err != nil {
+		log.Warningf("failed to create abc member; %s", err.Error())
+		return nil, err
+	}
+	return &member, nil
+}
+
 // CreateBlockchainMember creates member on blockchain provided
-func CreateBlockchainMember(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, blockchainMemberName string) (result *blockchain.Member, err error) {
+func CreateBlockchainMemberFuture(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, blockchainMemberName string) (result *blockchain.MembersCreateFuture, err error) {
 	abmClient, err := NewAzureBlockchainMemberClient(tc)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get blockchain client: %s; ", err.Error())
@@ -109,22 +123,16 @@ func CreateBlockchainMember(ctx context.Context, tc *provide.TargetCredentials, 
 	}
 	log.Warningf("blockchain member create started")
 
-	err = future.WaitForCompletionRef(ctx, abmClient.Client)
-	if err != nil {
-		log.Warningf("failed to create blockchain member; %s", err.Error())
-		return nil, err
-	}
-	log.Warningf("blockchain member create complete")
-
 	// member, err := future.Result(abmClient)
 	// if err != nil {
 	// 	log.Warningf("failed to create abc member; %s", err.Error())
 	// 	return nil, err
 	// }
 
-	return nil, nil
+	return &future, nil
 }
 
+// GetBlockchainMembersList gets list of blockchain members
 func GetBlockchainMembersList(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName string) (*blockchain.MemberCollectionPage, error) {
 
 	abmClient, err := NewAzureBlockchainMemberClient(tc)

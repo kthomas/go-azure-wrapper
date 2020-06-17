@@ -26,12 +26,19 @@ func TestMemberClient(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
 
-	resourceGroupName := "prvd-abs"
+	resourceGroupName := "blockchain"
 
-	member, err := CreateBlockchainMember(ctx, tc, resourceGroupName, "member4")
+	future, err := CreateBlockchainMemberFuture(ctx, tc, resourceGroupName, "hellomember")
 	if err != nil {
 		println(fmt.Sprintf("cannot create member: %v", err.Error()))
 	}
+
+	member, err := CreateBlockchainMemberResult(ctx, tc, future)
+	if err != nil {
+		log.Warningf("failed to get the member creation complete; %s", err.Error())
+	}
+
+	log.Warningf("blockchain member create complete")
 	println(fmt.Sprintf("member: %+v", *member))
 }
 
