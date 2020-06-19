@@ -56,13 +56,28 @@ func TestTransNode(t *testing.T) {
 	println(fmt.Sprintf("future node: %+v", *future))
 }
 
+func TestDeleteTransNode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	defer cancel()
+
+	resourceGroupName := "blockchain"
+
+	future, err := DeleteTransactionNode(ctx, tc, "hellomember", "hellonode2", resourceGroupName)
+	if err != nil {
+		println(fmt.Sprintf("cannot create node: %v", err.Error()))
+	}
+
+	log.Warningf("blockchain node create complete")
+	println(fmt.Sprintf("future node: %+v", *future))
+}
+
 func TestMemberClient(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
 
 	resourceGroupName := "blockchain"
 
-	future, err := CreateBlockchainMemberFuture(ctx, tc, resourceGroupName, "hellomember")
+	future, err := CreateBlockchainMember(ctx, tc, resourceGroupName, "hellomember")
 	if err != nil {
 		println(fmt.Sprintf("cannot create member: %v", err.Error()))
 	}
@@ -74,6 +89,20 @@ func TestMemberClient(t *testing.T) {
 
 	log.Warningf("blockchain member create complete")
 	println(fmt.Sprintf("member: %+v", *member))
+}
+
+func TestDeleteMember(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	defer cancel()
+
+	resourceGroupName := "blockchain"
+
+	future, err := DeleteBlockchainMember(ctx, tc, resourceGroupName, "hellomember")
+	if err != nil {
+		println(fmt.Sprintf("cannot delete member: %v", err.Error()))
+	}
+
+	println(fmt.Sprintf("future: %+v", *future))
 }
 
 func TestListMembers(t *testing.T) {

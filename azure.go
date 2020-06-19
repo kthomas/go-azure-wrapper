@@ -28,7 +28,7 @@ func NewAzureBlockchainMemberClient(tc *provide.TargetCredentials) (blockchain.M
 	}
 }
 
-// NewAzureBlockchainMemberClient is creating an azure blockchain member client
+// NewAzureBlockchainTransactionNodesClient is creating an azure blockchain transaction nodes client
 func NewAzureBlockchainTransactionNodesClient(tc *provide.TargetCredentials) (blockchain.TransactionNodesClient, error) {
 	client := blockchain.NewTransactionNodesClient(*tc.AzureSubscriptionID)
 	if auth, err := GetAuthorizer(tc); err == nil {
@@ -37,6 +37,21 @@ func NewAzureBlockchainTransactionNodesClient(tc *provide.TargetCredentials) (bl
 	} else {
 		return client, err
 	}
+}
+
+// DeleteTransactionNode starts transaction node deletion and returns `Future` object to poll the deletion result.
+func DeleteTransactionNode(ctx context.Context, tc *provide.TargetCredentials, blockchainMemberName, transactionNodeName, resourceGroupName string) (result *blockchain.TransactionNodesDeleteFuture, err error) {
+	tnClient, err := NewAzureBlockchainTransactionNodesClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get transaction nodes client: %s; ", err.Error())
+	}
+
+	future, err := tnClient.Delete(ctx, blockchainMemberName, transactionNodeName, resourceGroupName)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create transaction node: %s; ", err.Error())
+	}
+
+	return &future, nil
 }
 
 // CreateTransactionNode creates transation node on blockchain
@@ -113,8 +128,30 @@ func CreateBlockchainMemberResult(ctx context.Context, tc *provide.TargetCredent
 	return &member, nil
 }
 
-// CreateBlockchainMember creates member on blockchain provided
-func CreateBlockchainMemberFuture(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, blockchainMemberName string) (result *blockchain.MembersCreateFuture, err error) {
+// DeleteBlockchainMember starts member deletion and returns the `Future` object to poll the deletion result.
+func DeleteBlockchainMember(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, blockchainMemberName string) (result *blockchain.MembersDeleteFuture, err error) {
+	abmClient, err := NewAzureBlockchainMemberClient(tc)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get blockchain client: %s; ", err.Error())
+	}
+
+	future, err := abmClient.Delete(ctx, blockchainMemberName, resourceGroupName)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create member: %s; ", err.Error())
+	}
+	log.Warningf("blockchain member create started")
+
+	// member, err := future.Result(abmClient)
+	// if err != nil {
+	// 	log.Warningf("failed to create abc member; %s", err.Error())
+	// 	return nil, err
+	// }
+
+	return &future, nil
+}
+
+// CreateBlockchainMember creates member on blockchain provided, returns `Future` class pointer which can be used to poll the Azure for the final result.
+func CreateBlockchainMember(ctx context.Context, tc *provide.TargetCredentials, resourceGroupName, blockchainMemberName string) (result *blockchain.MembersCreateFuture, err error) {
 	abmClient, err := NewAzureBlockchainMemberClient(tc)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get blockchain client: %s; ", err.Error())
