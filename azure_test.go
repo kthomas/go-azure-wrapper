@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/to"
-	provide "github.com/provideservices/provide-go"
+	provide "github.com/provideservices/provide-go/api/nchain"
 )
 
 // type testData struct {
