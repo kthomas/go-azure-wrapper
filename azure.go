@@ -14,7 +14,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/go-autorest/autorest/to"
 
-	provide "github.com/provideservices/provide-go"
+	provide "github.com/provideservices/provide-go/api/nchain"
 )
 
 // NewAzureBlockchainMemberClient is creating an azure blockchain member client
