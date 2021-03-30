@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/containerinstance/mgmt/2018-10-01/containerinstance"
+	"github.com/Azure/azure-sdk-for-go/services/keyvault/v7.0/keyvault"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-12-01/network"
 	"github.com/Azure/azure-sdk-for-go/services/preview/blockchain/mgmt/2018-06-01-preview/blockchain"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-05-01/resources"
@@ -42,6 +43,17 @@ func NewContainerGroupsClient(tc *provide.TargetCredentials) (containerinstance.
 // NewContainerClient is creating a container group client
 func NewContainerClient(tc *provide.TargetCredentials) (containerinstance.ContainerClient, error) {
 	client := containerinstance.NewContainerClient(*tc.AzureSubscriptionID)
+	if auth, err := GetAuthorizer(tc); err == nil {
+		client.Authorizer = *auth
+		return client, nil
+	} else {
+		return client, err
+	}
+}
+
+// NewKeyVaultClient is creating a key vault client
+func NewKeyVaultClient(tc *provide.TargetCredentials) (keyvault.BaseClient, error) {
+	client := keyvault.New()
 	if auth, err := GetAuthorizer(tc); err == nil {
 		client.Authorizer = *auth
 		return client, nil
