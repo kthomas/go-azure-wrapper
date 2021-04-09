@@ -11,6 +11,6 @@ require (
 	github.com/kthomas/go-logger v0.0.0-20200602072946-d7d72dfc2531
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
-	github.com/provideservices/provide-go v0.0.0-20201123065953-837849d62820
+	github.com/provideservices/provide-go v0.0.0-20210409104111-70ad008e4ae8
 	github.com/stretchr/testify v1.5.1 // indirect
 )
