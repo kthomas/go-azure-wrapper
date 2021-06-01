@@ -21,10 +21,6 @@ import (
 // }
 
 var tc = &provide.TargetCredentials{
-	AzureTenantID:       to.StringPtr("28b2b885-0c05-42de-80fc-4740f934129a"),
-	AzureSubscriptionID: to.StringPtr("f7cc4b84-6fb8-40c5-be1f-a63f65a8f17c"),
-	AzureClientID:       to.StringPtr("3152275b-40a9-4266-aad7-05bac4804e31"),
-	AzureClientSecret:   to.StringPtr("7/fjmycak?Iv:y?MMzFuTbHT57UAKCw9"),
 }
 
 func TestStartContainer(t *testing.T) {
@@ -45,26 +41,34 @@ func TestStartContainer(t *testing.T) {
 			},
 		},
 	}
-	image := to.StringPtr("provide/nats-server:latest")
+	image := to.StringPtr("vlddm/binance-smart-chain-node")
+
+	// containerGroupName, _ := uuid.NewV4()
+	cgroupName := "a12c192c-2fba-4696-9418-845439c3e47b"
+	name := "eyblockchain-quorum-eval"
 
 	params := &provide.ContainerParams{
-		Region:            region,
-		ResourceGroupName: groupName,
-		Image:             image,
-		VirtualNetworkID:  to.StringPtr(vnetName),
-		CPU:               to.Int64Ptr(2),
-		Memory:            to.Int64Ptr(4),
-		Entrypoint:        []*string{},
-		SecurityGroupIds:  []string{},
-		SubnetIds:         []string{"subnet1", "subnet2"},
-		Environment:       map[string]interface{}{},
-		Security:          security,
+		Region:             region,
+		ResourceGroupName:  groupName,
+		Image:              image,
+		ContainerGroupName: to.StringPtr(cgroupName),
+		ContainerName:      to.StringPtr(name),
+		VirtualNetworkID:   to.StringPtr(vnetName),
+		CPU:                to.Int64Ptr(2),
+		Memory:             to.Int64Ptr(4),
+		Entrypoint:         []*string{},
+		SecurityGroupIds:   []string{},
+		SubnetIds:          []string{},
+		Environment:        map[string]interface{}{},
+		Security:           security,
 	}
 
 	_, err := UpsertResourceGroup(ctx, tc, region, groupName)
 	if err != nil {
 		println(fmt.Sprintf("cannot create group: %v", err.Error()))
 	}
+
+	println(fmt.Sprintf("container params: %+v", params))
 
 	// container, ids, err := StartContainer(params)
 	result, err := StartContainer(params, tc)
@@ -76,6 +80,13 @@ func TestStartContainer(t *testing.T) {
 	println(fmt.Sprintf("container ip: %s", *result.ContainerInterfaces[0].IPv4))
 	id := result.ContainerIds[0]
 	println(fmt.Sprintf("container id: %s", id))
+
+	// logs, err := ContainerLogs(context.TODO(), tc, groupName, id, id, nil)
+	// if err != nil {
+	// 	panic(fmt.Sprintf("%s", err.Error()))
+	// }
+	// println(fmt.Sprintf("container ids: %+v", logs.Content))
+	// println(fmt.Sprintf("container ids: %+v", logs))
 
 	// result, err = StartContainer(params, tc)
 	// if err != nil {
@@ -89,6 +100,24 @@ func TestStartContainer(t *testing.T) {
 	// id := "af0cca54-5883-4394-b876-db9839e76084"
 	// DeleteContainer(ctx, subscriptionID, groupName, id)
 
+}
+
+func TestLogs(t *testing.T) {
+	id := "a12c192c-2fba-4696-9418-845439c3e47b"
+	id2 := "nats-server"
+	groupName := "skynet"
+
+	logs, err := ContainerLogs(context.TODO(), tc, groupName, id, id2, nil)
+	if err != nil {
+		panic(fmt.Sprintf("%s", err.Error()))
+	}
+	println(fmt.Sprintf("log content: %+v", logs.Content))
+	var b []byte
+	logs.Response.Body.Read(b)
+	println(fmt.Sprintf("response content: %+v", logs.Response.Response))
+	fmt.Println(b)
+
+	println(fmt.Sprintf("logs: %+v", logs))
 }
 
 func TestUpsertResourceGroup(t *testing.T) {
