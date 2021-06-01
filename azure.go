@@ -3,6 +3,7 @@ package azurewrapper
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/containerinstance/mgmt/2018-10-01/containerinstance"
@@ -88,7 +89,12 @@ func newAuthorizer(tc *provide.TargetCredentials) (autorest.Authorizer, error) {
 	settings.Values["AZURE_CLIENT_ID"] = *tc.AzureClientID
 	settings.Values["AZURE_CLIENT_SECRET"] = *tc.AzureClientSecret
 	settings.Environment = azure.PublicCloud
-	settings.Values["AZURE_AD_RESOURCE"] = settings.Environment.ResourceManagerEndpoint
+
+	if os.Getenv("AZURE_AD_RESOURCE") != "" {
+		settings.Values["AZURE_AD_RESOURCE"] = os.Getenv("AZURE_AD_RESOURCE")
+	} else {
+		settings.Values["AZURE_AD_RESOURCE"] = settings.Environment.ResourceManagerEndpoint
+	}
 
 	// if err != nil {
 	// 	return nil, err
