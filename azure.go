@@ -342,6 +342,27 @@ func StartContainer(cp *provide.ContainerParams, tc *provide.TargetCredentials) 
 	// return []string{*containerGroup.ID}, []string{*containerGroup.Name}, nil
 }
 
+// GetContainerDetails returns container info.
+func GetContainerDetails(resourceGroupName, containerGroupName *string, tc *provide.TargetCredentials) (result *containerinstance.ContainerGroup, err error) {
+	cgClient, err := NewContainerGroupsClient(tc)
+	if err != nil {
+		log.Warningf("Unable to get container group client: %s; ", err.Error())
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	defer cancel()
+
+	response, err := cgClient.Get(ctx, *resourceGroupName, *containerGroupName)
+	if err != nil {
+		log.Warningf("failed to get container details; %s", err.Error())
+		return nil, err
+	}
+	result = &response
+
+	return
+}
+
 // DeleteResourceGroup deletes resource group
 func DeleteResourceGroup(ctx context.Context, tc *provide.TargetCredentials, name string) (result bool, err error) {
 	gClient, err := NewResourceGroupsClient(tc)
