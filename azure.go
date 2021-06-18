@@ -162,7 +162,8 @@ func DeleteContainer(ctx context.Context, tc *provide.TargetCredentials, resourc
 		return fmt.Errorf("Unable to get container group client: %s; ", err.Error())
 	}
 
-	_, err = cgClient.Delete(ctx, resourceGroupName, containerID)
+	containerGroup, err := cgClient.Delete(ctx, resourceGroupName, containerID)
+	log.Debugf("containerGroup: %+v", containerGroup)
 	if err != nil {
 		return fmt.Errorf("Unable to delete container: %s; ", err.Error())
 	}
